@@ -9,5 +9,5 @@ class d():
         self.learning_rate = 0.5
         self.epochs = 100
         self.cuda = False
-        self.data_dir = r'F:\Games'
+        self.data_dir = r'F:\Games\birds.hdf5'
         self.save_dir = r'F:\Games\saved_models'

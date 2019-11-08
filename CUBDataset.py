@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 class CUBDataset(Dataset):
-    def __init(self, dataset_dir, transform=None, split=0):
+    def __init__(self, dataset_dir, transform=None, split=0):
         self.transform = transform
         self.split = split
         self.dataset_dir = dataset_dir

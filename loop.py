@@ -83,8 +83,8 @@ class Trainer(object):
         self.dataset = CUBDataset(data_dir, split=split)
         self.dataset = DataLoader(dataset=self.dataset, batch_size = batch_size, shuffle=True, pin_memory=True)
 
-        self.optimD = torch.optim.adam(self.disc.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
-        self.optimG = torch.optim.adam(self.gen.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
+        self.optimD = torch.optim.Adam(self.disc.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
+        self.optimG = torch.optim.Adam(self.gen.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
 
         self.model_dir = save_path
         self.epochs = epochs
