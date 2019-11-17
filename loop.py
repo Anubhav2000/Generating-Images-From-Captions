@@ -1,4 +1,5 @@
 import torch
+from torchvision import transforms
 import torchvision
 from cfg import d
 from torch import autograd
@@ -9,6 +10,7 @@ from torch.utils.data import DataLoader
 from CUBDataset import CUBDataset
 from torch.autograd import Variable
 import numpy as np
+
 
 class Helper(object):
     def save_model(self, netD, netG, dir_path, epoch):
@@ -26,6 +28,7 @@ class Helper(object):
         elif classname.find('BatchNorm') != -1:
             m.weight.data.normal_(1.0, 0.02)
             m.bias.data.fill_(0)
+
 
 class Logger(object):
     def __init__(self, vis_screen):
@@ -70,10 +73,11 @@ class Logger(object):
         self.viz.draw('generated images', fake_images.data.cpu().numpy()[:64] * 128 + 128)
         self.viz.draw('real images', right_images.data.cpu().numpy()[:64] * 128 + 128)
 
+
 class Trainer(object):
     def __init__(self, data_dir, batch_size, epochs, save_path, learning_rate, split):
-        dev = d()
-        if dev.cuda==False:
+        self.dev = d()
+        if self.dev.cuda == False:
             self.gen = generator()
             self.disc = discriminator()
         else:
@@ -81,7 +85,7 @@ class Trainer(object):
             self.disc = torch.nn.DataParallel(discriminator.cuda())
 
         self.dataset = CUBDataset(data_dir, split=split)
-        self.dataset = DataLoader(dataset=self.dataset, batch_size = batch_size, shuffle=True, pin_memory=True)
+        self.dataLoader = DataLoader(dataset=self.dataset, batch_size=1, shuffle=True, pin_memory=True)
 
         self.optimD = torch.optim.Adam(self.disc.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
         self.optimG = torch.optim.Adam(self.gen.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
@@ -98,66 +102,107 @@ class Trainer(object):
         l1 = torch.nn.L1Loss()
 
         for epoch in range(self.epochs):
-            iter = 0
-            for point in self.dataset:
+            dataiterator = iter(self.dataLoader)
+            iteri = 0
+            for point in self.dataLoader:
+                # print(len(point))
+                # iteri = iteri + 1
+                # point = next(dataiterator)
                 correct_image = point['correct_image']
                 incorrect_image = point['incorrect_image']
                 correct_embed = point['correct_embed']
                 #---------------------------------------------------------------------
 
                 #For discriminator
-                correct_image = Variable(correct_image.float()).cuda()
-                incorrect_image = Variable(incorrect_image.float()).cuda()
-                correct_embed = Variable(correct_embed.float()).cuda()
-
-                incorrect_labels = Variable(np.zeroes(self.batch_size)).cuda()
-                # One Sided Label Smoothing
-                correct_labels = torch.FloatTensor(np.ones(self.batch_size) + -1)
-                correct_labels  = Variable(correct_labels).cuda()
-
-                self.disc.zero_grad()
-                # Right images and right caption
-                output, activations = self.disc(correct_image, correct_labels)
-                correct_loss = bce(output, correct_labels)
-                # Wrong image and right caption
-                output, activations = self.disc(incorrect_image, correct_labels)
-                incorrect_loss = bce(output, incorrect_labels)
-
-                #Generated image and right captions
-                noise = Variable(torch.random(self.batch_size, 100)).cuda()
-                noise = noise.view(self.batch_size, 100, 1, 1)
-                # Feeding it to the discriminator
-                generated_images = Variable(self.gen(noise, correct_labels)).cuda()
-                output, activations = self.disc(generated_images, correct_labels)
-                generated_loss = torch.mean(output)
-                # Calculating the net loss
-                net_loss = generated_loss + correct_loss + incorrect_loss
-                net_loss.backward()
-                # Taking one more step towards convergence
-                self.optimD.step()
-                # ----------------------------------------------------------------------------
-                #For generator
-                self.gen.zero_grad()
-                noise = Variable(torch.random(self.batch_size, 100)).cuda()
-                noise = noise.view(self.batch_size, 100, 1, 1)
-
-                generated_images = Variable(self.gen(noise, correct_labels)).cuda()
-                output, generated = self.disc(generated_images, correct_labels)
-                output, real = self.disc(correct_image, correct_labels)
-
-                generated = torch.mean(generated, 0)
-                real = torch.mean(real, 0)
-
-                net_loss = bce(output, correct_labels) + mse(generated, real)*100 + 50*l1(generated_images, correct_image)
-                net_loss.backward()
-                self.optimG.step()
-
-
-
-
-
-
-
-
-
-
+                if(self.dev.cuda ==True):
+                    correct_image = Variable(correct_image.float()).cuda()
+                    incorrect_image = Variable(incorrect_image.float()).cuda()
+                    correct_embed = Variable(correct_embed.float()).cuda()
+    
+                    incorrect_labels = Variable(np.zeroes(self.batch_size)).cuda()
+                    # One Sided Label Smoothing
+                    correct_labels = torch.FloatTensor(np.ones(self.batch_size) + -1)
+                    correct_labels  = Variable(correct_labels).cuda()
+    
+                    self.disc.zero_grad()
+                    # Right images and right caption
+                    output, activations = self.disc(correct_image, correct_labels)
+                    correct_loss = bce(output, correct_labels)
+                    # Wrong image and right caption
+                    output, activations = self.disc(incorrect_image, correct_labels)
+                    incorrect_loss = bce(output, incorrect_labels)
+    
+                    #Generated image and right captions
+                    noise = Variable(torch.random(self.batch_size, 100)).cuda()
+                    noise = noise.view(self.batch_size, 100, 1, 1)
+                    # Feeding it to the discriminator
+                    generated_images = Variable(self.gen(noise, correct_labels)).cuda()
+                    output, activations = self.disc(generated_images, correct_labels)
+                    generated_loss = torch.mean(output)
+                    # Calculating the net loss
+                    net_loss = generated_loss + correct_loss + incorrect_loss
+                    net_loss.backward()
+                    # Taking one more step towards convergence
+                    self.optimD.step()
+                    # ----------------------------------------------------------------------------
+                    #For generator
+                    self.gen.zero_grad()
+                    noise = Variable(torch.random(self.batch_size, 100)).cuda()
+                    noise = noise.view(self.batch_size, 100, 1, 1)
+    
+                    generated_images = Variable(self.gen(noise, correct_labels)).cuda()
+                    output, generated = self.disc(generated_images, correct_labels)
+                    output, real = self.disc(correct_image, correct_labels)
+    
+                    generated = torch.mean(generated, 0)
+                    real = torch.mean(real, 0)
+    
+                    net_loss = bce(output, correct_labels) + mse(generated, real)*100 + 50*l1(generated_images, correct_image)
+                    net_loss.backward()
+                    self.optimG.step()
+                else:
+                    correct_image = Variable(correct_image.float())
+                    incorrect_image = Variable(incorrect_image.float())
+                    correct_embed = Variable(correct_embed.float())
+    
+                    incorrect_labels =torch.zeros(correct_image.size(0))
+                    # One Sided Label Smoothing
+                    correct_labels = torch.ones(correct_image.size(0))
+                    correct_labels  = Variable(correct_labels + -1)
+    
+                    self.disc.zero_grad()
+                    # Right images and right caption
+                    output, activations = self.disc(correct_image, correct_labels)
+                    correct_loss = bce(output, correct_labels)
+                    # Wrong image and right caption
+                    output, activations = self.disc(incorrect_image, correct_labels)
+                    incorrect_loss = bce(output, incorrect_labels)
+    
+                    #Generated image and right captions
+                    noise = Variable(torch.random(self.batch_size, 100))
+                    noise = noise.view(self.batch_size, 100, 1, 1)
+                    # Feeding it to the discriminator
+                    generated_images = Variable(self.gen(noise, correct_labels))
+                    output, activations = self.disc(generated_images, correct_labels)
+                    generated_loss = torch.mean(output)
+                    # Calculating the net loss
+                    net_loss = generated_loss + correct_loss + incorrect_loss
+                    net_loss.backward()
+                    # Taking one more step towards convergence
+                    self.optimD.step()
+                    # ----------------------------------------------------------------------------
+                    #For generator
+                    self.gen.zero_grad()
+                    noise = Variable(torch.random(self.batch_size, 100))
+                    noise = noise.view(self.batch_size, 100, 1, 1)
+    
+                    generated_images = Variable(self.gen(noise, correct_labels))
+                    output, generated = self.disc(generated_images, correct_labels)
+                    output, real = self.disc(correct_image, correct_labels)
+    
+                    generated = torch.mean(generated, 0)
+                    real = torch.mean(real, 0)
+    
+                    net_loss = bce(output, correct_labels) + mse(generated, real)*100 + 50*l1(generated_images, correct_image)
+                    net_loss.backward()
+                    self.optimG.step()
