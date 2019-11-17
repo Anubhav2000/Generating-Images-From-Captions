@@ -28,8 +28,8 @@ class Helper(object):
         elif classname.find('BatchNorm') != -1:
             m.weight.data.normal_(1.0, 0.02)
             m.bias.data.fill_(0)
-
-
+    
+            
 class Logger(object):
     def __init__(self, vis_screen):
         self.viz = VisdomPlotter(env_name=vis_screen)
@@ -85,7 +85,7 @@ class Trainer(object):
             self.disc = torch.nn.DataParallel(discriminator.cuda())
 
         self.dataset = CUBDataset(data_dir, split=split)
-        self.dataLoader = DataLoader(dataset=self.dataset, batch_size=1, shuffle=True, pin_memory=True)
+        self.dataLoader = DataLoader(dataset=self.dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
         self.optimD = torch.optim.Adam(self.disc.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
         self.optimG = torch.optim.Adam(self.gen.parameters(), lr=learning_rate, betas=(0.5, 0.99), amsgrad=True)
@@ -106,7 +106,8 @@ class Trainer(object):
             iteri = 0
             for point in self.dataLoader:
                 # print(len(point))
-                # iteri = iteri + 1
+                iteri = iteri + 1
+                print(iteri)
                 # point = next(dataiterator)
                 correct_image = point['correct_image']
                 incorrect_image = point['incorrect_image']
@@ -126,18 +127,18 @@ class Trainer(object):
     
                     self.disc.zero_grad()
                     # Right images and right caption
-                    output, activations = self.disc(correct_image, correct_labels)
+                    output, activations = self.disc(correct_image, correct_embed)
                     correct_loss = bce(output, correct_labels)
                     # Wrong image and right caption
-                    output, activations = self.disc(incorrect_image, correct_labels)
+                    output, activations = self.disc(incorrect_image, correct_embed)
                     incorrect_loss = bce(output, incorrect_labels)
     
                     #Generated image and right captions
-                    noise = Variable(torch.random(self.batch_size, 100)).cuda()
+                    noise = Variable(torch.randn(self.batch_size, 100)).cuda()
                     noise = noise.view(self.batch_size, 100, 1, 1)
                     # Feeding it to the discriminator
-                    generated_images = Variable(self.gen(noise, correct_labels)).cuda()
-                    output, activations = self.disc(generated_images, correct_labels)
+                    generated_images = Variable(self.gen(correct_embed, noise)).cuda()
+                    output, activations = self.disc(generated_images, correct_embed)
                     generated_loss = torch.mean(output)
                     # Calculating the net loss
                     net_loss = generated_loss + correct_loss + incorrect_loss
@@ -147,12 +148,12 @@ class Trainer(object):
                     # ----------------------------------------------------------------------------
                     #For generator
                     self.gen.zero_grad()
-                    noise = Variable(torch.random(self.batch_size, 100)).cuda()
+                    noise = Variable(torch.randn(self.batch_size, 100)).cuda()
                     noise = noise.view(self.batch_size, 100, 1, 1)
     
-                    generated_images = Variable(self.gen(noise, correct_labels)).cuda()
-                    output, generated = self.disc(generated_images, correct_labels)
-                    output, real = self.disc(correct_image, correct_labels)
+                    generated_images = Variable(self.gen(correct_embed, noise)).cuda()
+                    output, generated = self.disc(generated_images, correct_embed)
+                    output, real = self.disc(correct_image, correct_embed)
     
                     generated = torch.mean(generated, 0)
                     real = torch.mean(real, 0)
@@ -172,18 +173,18 @@ class Trainer(object):
     
                     self.disc.zero_grad()
                     # Right images and right caption
-                    output, activations = self.disc(correct_image, correct_labels)
+                    output, activations = self.disc(correct_image, correct_embed)
                     correct_loss = bce(output, correct_labels)
                     # Wrong image and right caption
-                    output, activations = self.disc(incorrect_image, correct_labels)
+                    output, activations = self.disc(incorrect_image, correct_embed)
                     incorrect_loss = bce(output, incorrect_labels)
     
                     #Generated image and right captions
-                    noise = Variable(torch.random(self.batch_size, 100))
+                    noise = Variable(torch.randn(correct_image.size(0), 100))
                     noise = noise.view(self.batch_size, 100, 1, 1)
                     # Feeding it to the discriminator
-                    generated_images = Variable(self.gen(noise, correct_labels))
-                    output, activations = self.disc(generated_images, correct_labels)
+                    generated_images = Variable(self.gen(correct_embed, noise))
+                    output, activations = self.disc(generated_images, correct_embed)
                     generated_loss = torch.mean(output)
                     # Calculating the net loss
                     net_loss = generated_loss + correct_loss + incorrect_loss
@@ -193,12 +194,12 @@ class Trainer(object):
                     # ----------------------------------------------------------------------------
                     #For generator
                     self.gen.zero_grad()
-                    noise = Variable(torch.random(self.batch_size, 100))
+                    noise = Variable(torch.randn(self.batch_size, 100))
                     noise = noise.view(self.batch_size, 100, 1, 1)
     
-                    generated_images = Variable(self.gen(noise, correct_labels))
-                    output, generated = self.disc(generated_images, correct_labels)
-                    output, real = self.disc(correct_image, correct_labels)
+                    generated_images = Variable(self.gen(correct_embed, noise))
+                    output, generated = self.disc(generated_images, correct_embed)
+                    output, real = self.disc(correct_image, correct_embed)
     
                     generated = torch.mean(generated, 0)
                     real = torch.mean(real, 0)
@@ -206,3 +207,9 @@ class Trainer(object):
                     net_loss = bce(output, correct_labels) + mse(generated, real)*100 + 50*l1(generated_images, correct_image)
                     net_loss.backward()
                     self.optimG.step()
+                    
+            if epoch%10==0:
+                Helper.save_model(self.disc, self.gen, 'checkpoints', epoch)
+            if epoch%2==0 :
+                path = epoch + ' images'
+                Helper.draw(correct_image, incorrect_image, path)

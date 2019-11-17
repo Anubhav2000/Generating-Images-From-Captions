@@ -63,6 +63,8 @@ class discriminator(nn.Module):
 
     def forward(self, inp, embed):
         x_intermediate = self.netD_1(inp)
+        print(x_intermediate.shape)
+        print(embed.shape)
         x = self.projector(x_intermediate, embed)
         x = self.netD_2(x)
 
